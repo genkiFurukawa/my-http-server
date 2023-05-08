@@ -8,14 +8,19 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MyHttpServer {
     public static final String CRLF = "\r\n";
+
+    private final ExecutorService worker;
 
     // NOTE: シングルトンにする
     private static MyHttpServer myHttpServer = new MyHttpServer();
 
     private MyHttpServer() {
+        worker = Executors.newCachedThreadPool();
     }
 
     public static MyHttpServer getInstance() {
@@ -27,7 +32,6 @@ public class MyHttpServer {
     // NOTE: socket(2) => bind(2) => listen(2) => accept(2)
     public void run() {
         // リクエストを捌いたら、次のリクエストを受け付ける
-
         try (ServerSocket serverSocket = new ServerSocket()) {
             // ポート番号を指定してサーバー側のソケットを作成
             serverSocket.bind(new InetSocketAddress(80));
@@ -37,40 +41,49 @@ public class MyHttpServer {
                 // MEMO: CHAT-GPTより
                 // accept()メソッドは、新しいクライアントの接続があるまでプログラムをブロックするため、通常は別のスレッドで実行する必要がある。
                 // また、複数のクライアントと接続する場合は、accept()メソッドをループさせる必要がある。
-                try (Socket socket = serverSocket.accept()) {
-                    System.out.println(">>");
+                Socket socket = serverSocket.accept();
+                this.worker.submit(() -> {
+                    long currentThreadId = Thread.currentThread().getId();
+                    System.out.println(">> current thread id is " + currentThreadId);
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                         BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+                        HttpRequest httpRequest;
+                        try {
+                            httpRequest = readRequest(reader);
+                        } catch (IllegalRequestLineException e) {
+                            writer.write("HTTP/1.1 500 Internal Server Error" + CRLF);
+                            writer.write("Content-Length: 0" + CRLF);
+                            writer.write("Content-Type: text/html" + CRLF);
+                            writer.write(CRLF);
+                            writer.flush();
+                            System.out.println("<<");
+                            return;
+                        }
 
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+                        System.out.println("[" + currentThreadId + "] method: " + httpRequest.getMethod());
+                        System.out.println("[" + currentThreadId + "] path: " + httpRequest.getPath());
+                        System.out.println("[" + currentThreadId + "] HTTP/1." + httpRequest.getProtocolMinorVersion());
+                        System.out.println("[" + currentThreadId + "] body: " + httpRequest.getBody());
 
-                    HttpRequest httpRequest;
-                    try {
-                        httpRequest = readRequest(reader);
-                    } catch (IllegalRequestLineException e) {
-                        writer.write("HTTP/1.1 500 Internal Server Error" + CRLF);
-                        writer.write("Content-Length: 0" + CRLF);
+                        // HTTP レスポンス
+                        writer.write("HTTP/1.1 200 OK" + CRLF);
+                        writer.write("Content-Length: 0" + CRLF); //TODO: Content-Lengthを設定する
                         writer.write("Content-Type: text/html" + CRLF);
                         writer.write(CRLF);
                         writer.flush();
-                        System.out.println("<<");
-                        continue;
+                        System.out.println("<< current thread id is " + currentThreadId);
+                    } catch (IOException | ClientDisconnectedException e) {
+                        e.printStackTrace();
                     }
-
-                    System.out.println("method: " + httpRequest.getMethod());
-                    System.out.println("path: " + httpRequest.getPath());
-                    System.out.println("HTTP/1." + httpRequest.getProtocolMinorVersion());
-                    System.out.println("body: " + httpRequest.getBody());
-
-                    // HTTP レスポンス
-                    writer.write("HTTP/1.1 200 OK" + CRLF);
-                    writer.write("Content-Length: 0" + CRLF); //TODO: Content-Lengthを設定する
-                    writer.write("Content-Type: text/html" + CRLF);
-                    writer.write(CRLF);
-                    writer.flush();
-                    System.out.println("<<");
-                }
+                    // NOTE: try-with-resource文だと、別スレッド処理中にsocketがクローズされてしまうので、ここで明示的に閉じる
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
             }
-        } catch (IOException | ClientDisconnectedException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
@@ -84,7 +97,8 @@ public class MyHttpServer {
      * @throws IOException
      * @throws ClientDisconnectedException
      */
-    private HttpRequest readRequest(BufferedReader reader) throws IllegalRequestLineException, IOException, ClientDisconnectedException {
+    private HttpRequest readRequest(BufferedReader reader) throws
+            IllegalRequestLineException, IOException, ClientDisconnectedException {
         HttpRequest httpRequest = new HttpRequest();
 
         readRequestLine(reader, httpRequest);
@@ -104,7 +118,8 @@ public class MyHttpServer {
      * @throws ClientDisconnectedException
      * @throws IllegalRequestLineException
      */
-    private void readRequestLine(BufferedReader reader, HttpRequest httpRequest) throws IOException, ClientDisconnectedException, IllegalRequestLineException {
+    private void readRequestLine(BufferedReader reader, HttpRequest httpRequest) throws
+            IOException, ClientDisconnectedException, IllegalRequestLineException {
         String line = reader.readLine();
         if (line == null) {
             throw new ClientDisconnectedException();
