@@ -12,6 +12,16 @@ import java.net.Socket;
 public class MyHttpServer {
     public static final String CRLF = "\r\n";
 
+    // NOTE: シングルトンにする
+    private static MyHttpServer myHttpServer = new MyHttpServer();
+
+    private MyHttpServer() {
+    }
+
+    public static MyHttpServer getInstance() {
+        return myHttpServer;
+    }
+
     // NOTE: サーバ側は4つのシステムコールが必要
     // NOTE: ↓ 呼ばれるシステムコール
     // NOTE: socket(2) => bind(2) => listen(2) => accept(2)
@@ -24,6 +34,9 @@ public class MyHttpServer {
             System.out.println("Server listening on port 80...");
 
             while (true) {
+                // MEMO: CHAT-GPTより
+                // accept()メソッドは、新しいクライアントの接続があるまでプログラムをブロックするため、通常は別のスレッドで実行する必要がある。
+                // また、複数のクライアントと接続する場合は、accept()メソッドをループさせる必要がある。
                 try (Socket socket = serverSocket.accept()) {
                     System.out.println(">>");
 
@@ -35,7 +48,7 @@ public class MyHttpServer {
                         httpRequest = readRequest(reader);
                     } catch (IllegalRequestLineException e) {
                         writer.write("HTTP/1.1 500 Internal Server Error" + CRLF);
-                        writer.write("Content-Length: 0" + CRLF); //TODO: Content-Lengthを設定する
+                        writer.write("Content-Length: 0" + CRLF);
                         writer.write("Content-Type: text/html" + CRLF);
                         writer.write(CRLF);
                         writer.flush();
