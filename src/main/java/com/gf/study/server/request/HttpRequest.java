@@ -2,11 +2,14 @@ package com.gf.study.server.request;
 
 import com.gf.study.server.exception.IllegalRequestLineException;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class HttpRequest {
     private int protocolMinorVersion;
     private String method;
     private String path;
-    private HttpHeaderField httpHeaderField;
+    private List<HttpHeaderField> httpHeaderFieldList = new ArrayList<>();
     private String body;
     private long length;
 
@@ -34,12 +37,12 @@ public class HttpRequest {
         this.path = path;
     }
 
-    public HttpHeaderField getHttpHeaderField() {
-        return httpHeaderField;
+    public List<HttpHeaderField> getHttpHeaderFieldList() {
+        return httpHeaderFieldList;
     }
 
-    public void setHttpHeaderField(HttpHeaderField httpHeaderField) {
-        this.httpHeaderField = httpHeaderField;
+    public void setHttpHeaderField(List<HttpHeaderField> httpHeaderFieldList) {
+        this.httpHeaderFieldList = httpHeaderFieldList;
     }
 
     public String getBody() {

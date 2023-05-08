@@ -2,6 +2,7 @@ package com.gf.study.server;
 
 import com.gf.study.server.exception.ClientDisconnectedException;
 import com.gf.study.server.exception.IllegalRequestLineException;
+import com.gf.study.server.request.HttpHeaderField;
 import com.gf.study.server.request.HttpRequest;
 
 import java.io.*;
@@ -63,7 +64,15 @@ public class MyHttpServer {
                         System.out.println("[" + currentThreadId + "] method: " + httpRequest.getMethod());
                         System.out.println("[" + currentThreadId + "] path: " + httpRequest.getPath());
                         System.out.println("[" + currentThreadId + "] HTTP/1." + httpRequest.getProtocolMinorVersion());
+                        for (HttpHeaderField headerField: httpRequest.getHttpHeaderFieldList()) {
+                            System.out.println("[" + currentThreadId + "] key: " + headerField.getName() + ", value: " + headerField.getValue());
+                        }
                         System.out.println("[" + currentThreadId + "] body: " + httpRequest.getBody());
+
+                        // TODO: HTTPメソッドとパスに基づいてハンドリングする
+                        // TODO: 見つからなければ404を返す
+                        // TODO: この記事を読んだらルータ部分を実装してみる
+                        // NOTE: https://zenn.dev/bmf_san/books/3f41c5cd34ec3f
 
                         // HTTP レスポンス
                         writer.write("HTTP/1.1 200 OK" + CRLF);
@@ -140,6 +149,10 @@ public class MyHttpServer {
             if (line.startsWith("Content-Length: ")) {
                 int contentLength = Integer.valueOf(line.replace("Content-Length: ", ""));
                 httpRequest.setLength(contentLength);
+            }
+            String[] keyValue = line.split(":");
+            if (keyValue.length == 2) {
+                httpRequest.getHttpHeaderFieldList().add(new HttpHeaderField(keyValue[0], keyValue[1].trim()));
             }
             line = reader.readLine();
         }
